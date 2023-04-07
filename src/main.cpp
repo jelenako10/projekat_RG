@@ -24,6 +24,7 @@ void processInput(GLFWwindow *window);
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods);
 unsigned int loadTexture(char const *path);
 unsigned int loadCubemap(vector<std::string> &faces);
+void hasLights(Shader& shader, bool directional, bool pointLight, bool spotlight);
 
 // resolution
 const unsigned int SCR_WIDTH = 1920;
@@ -38,8 +39,48 @@ bool firstMouse = true;
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 
+struct SpotLight {
+    glm::vec3 position;
+    glm::vec3 direction;
+    float cutOff;
+    float outerCutOff;
+
+    double constant;
+    double linear;
+    double quadratic;
+
+    glm::vec3 ambient;
+    glm::vec3 diffuse;
+    glm::vec3 specular;
+
+    SpotLight(){
+        position = glm::vec3(0.0f, 4.0f, 0.0f);
+    }
+};
+
+struct PointLight {
+    glm::vec3 position;
+
+    double constant;
+    double linear;
+    double quadratic;
+
+    glm::vec3 ambient;
+    glm::vec3 diffuse;
+    glm::vec3 specular;
+
+    PointLight(){
+        position = glm::vec3(-9.0f, 13.0f, 5.0f);
+    }
+};
+
 struct Prozor{
     glm::vec3 position;
+    float rotateX;
+    float rotateY;
+    float rotateZ;
+
+    float windowScaleFactor;
 };
 
 struct DirLight {
@@ -57,11 +98,24 @@ struct ProgramState {
 
     glm::vec3 clearColor = glm::vec3(0.0f);
     DirLight dirLight;
+    SpotLight spotLight;
+    PointLight pointLight;
 
     glm::vec3 platformPosition = glm::vec3(0.0f, 0.4321f, 0.0f);
+    glm::vec3 bearPosition = glm::vec3(0.0f, 1.205f, 0.45f);
+    glm::vec3 pipePosition=glm::vec3 (-13.0f, 2.0f, -13.0f);
+
+    bool hasNormalMapping = false;
 
     std::vector<Prozor> prozori;
     float heightScale = 0.05;
+
+    glm::vec3 spotlightPositions[4] = {
+            glm::vec3(5.0f, 5.0f, -5.0f),
+            glm::vec3(-5.0f, 5.0f, 5.0f),
+            glm::vec3(-5.0f, 5.0f, -5.0f),
+            glm::vec3(5.0f, 5.0f, 5.0f)
+    };
 
     ProgramState()
         :camera(glm::vec3(0.0f, 0.0f, 0.0f)){};
@@ -71,6 +125,7 @@ struct ProgramState {
     void LoadFromFile(std::string filename);
 };
 
+void initializeTransparentWindows(vector<Prozor> &prozori);
 
 void ProgramState::SaveToFile(std::string filename) {
     std::ofstream out(filename);
@@ -178,8 +233,19 @@ int main() {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
 
-    // Shaders
     Shader skyboxShader("resources/shaders/skybox_shader.vs","resources/shaders/skybox_shader.fs");
+    Shader spotlightShader("resources/shaders/spotlightShader.vs","resources/shaders/spotlightShader.fs");
+
+    //model bear
+    Model circusBear("resources/objects/circus_bear/14089_Circus_Bear_Standing_on_large_ball_v1_l2.obj");
+    circusBear.SetShaderTextureNamePrefix("material.");
+    unsigned int bearTextureDiffuse = loadTexture("resources/objects/circus_bear/14089_Circus_bear_standing_on_large_ball_diffuse.jpg");
+    unsigned int bearTextureSpecular = loadTexture("resources/objects/circus_bear/ball_diffuse.jpg");
+    unsigned int bearTextureNormal = loadTexture("resources/objects/circus_bear/cap_diffuse2.jpg");
+
+    //model pipe
+    Model pipe("resources/objects/tube/tube.obj");
+    pipe.SetShaderTextureNamePrefix("material.");
 
     //model platform
     Model platform("resources/objects/platform/Rotating_Light_Platform_Final.fbx");
@@ -194,6 +260,34 @@ int main() {
     unsigned int floorTextureNormal = loadTexture("resources/textures/beach_texture/Seamless_beach_sand_footsteps_texture_NORMAL.jpg");
     unsigned int floorTextureHeigth = loadTexture("resources/textures/beach_texture/Seamless_beach_sand_footsteps_texture_DISP.jpg");
 
+    vector<Prozor> &prozori = programState->prozori;
+    initializeTransparentWindows(prozori);
+
+    SpotLight& spotLight = programState->spotLight;
+    spotLight.direction = glm::normalize(programState->bearPosition - programState->spotLight.position);
+    spotLight.ambient = glm::vec3(0.0f,0.0f,0.0f);
+    spotLight.diffuse = glm::vec3(1.0f,1.0f,1.0f);
+    spotLight.specular = glm::vec3(1.0f,1.0f,1.0f);
+    spotLight.constant = 1.0f;
+    spotLight.linear = 0.045f;
+    spotLight.quadratic = 0.0005f;
+    spotLight.cutOff = glm::cos(glm::radians(30.5f));
+    spotLight.outerCutOff = glm::cos(glm::radians(45.0f));
+
+    PointLight& pointLight = programState->pointLight;
+    pointLight.position = programState->pointLight.position;                   // trenutno spotlight osvetljava formulu a pointlight osvetljava sve
+    pointLight.ambient = glm::vec3(0.2f,0.2f,0.2f);
+    pointLight.diffuse = glm::vec3(0.7f,0.7f,0.7f);
+    pointLight.specular = glm::vec3(1.0f,1.0f,1.0f);
+    pointLight.constant = 1.0f;
+    pointLight.linear = 0.08f;
+    pointLight.quadratic = 0.006f;
+
+    DirLight& dirLight = programState->dirLight;
+    dirLight.direction = glm::vec3(0.07f, 0.08f, -1.0f);
+    dirLight.ambient = glm::vec3(0.08f);
+    dirLight.diffuse = glm::vec3(0.3f);
+    dirLight.specular = glm::vec3(0.4f);
 
     // cube data
     float cubeVertices[] = {
@@ -379,12 +473,98 @@ int main() {
                                                 (float) SCR_WIDTH / (float) SCR_HEIGHT, 0.1f, 100.0f);
         glm::mat4 view = programState->camera.GetViewMatrix();
 
+        //crtanje medveda
+        glm::mat4 model = glm::mat4(1.0f);
+        shader_rb_bear->use();
+        shader_rb_bear->setFloat("transparency", 1.0f);
+        hasLights(*shader_rb_bear, true, false, true);
+        shader_rb_bear->setMat4("projection", projection);
+        shader_rb_bear->setMat4("view", view);
+
+        model = glm::translate(model, programState->bearPosition);
+        model = glm::scale(model, glm::vec3(0.03f, 0.03f, 0.03f));
+        model= glm::rotate(model, 3.6f, glm::vec3(0.0f, 1.0f, 1.0f));
+        shader_rb_bear->use();
+
+        if(rotation1)
+            model = glm::rotate(model, 0.45f* currentFrame, glm::vec3(0.0f,0.0f,1.0f));
+
+        model = glm::translate(model, programState->bearPosition);
+        shader_rb_bear->setMat4("model", model);
+
+        shader_rb_bear->setVec3("pointLights[0].position", programState->pointLight.position);
+        shader_rb_bear->setVec3("pointLights[0].ambient", programState->pointLight.ambient);
+        shader_rb_bear->setVec3("pointLights[0].diffuse", programState->pointLight.diffuse);
+        shader_rb_bear->setVec3("pointLights[0].specular", programState->pointLight.specular);
+        shader_rb_bear->setFloat("pointLights[0].constant", programState->pointLight.constant);
+        shader_rb_bear->setFloat("pointLights[0].linear", programState->pointLight.linear);
+        shader_rb_bear->setFloat("pointLights[0].quadratic",programState->pointLight.quadratic);
+
+
+        shader_rb_bear->setFloat("material.shininess", 32.0f);
+        shader_rb_bear->setVec3("viewPos", programState->camera.Position);
+
+        shader_rb_bear->setVec3("spotLight[1].position", programState->spotlightPositions[1]);
+        spotLight.direction = glm::normalize(programState->bearPosition - programState->spotlightPositions[1]);
+        shader_rb_bear->setVec3("spotLight[1].direction", programState->spotLight.direction);
+
+        shader_rb_bear->setVec3("spotLight[1].ambient", programState->spotLight.ambient);
+        shader_rb_bear->setVec3("spotLight[1].diffuse", programState->spotLight.diffuse);
+        shader_rb_bear->setVec3("spotLight[1].specular", programState->spotLight.specular);
+        shader_rb_bear->setFloat("spotLight[1].constant", programState->spotLight.constant);
+        shader_rb_bear->setFloat("spotLight[1].linear", programState->spotLight.linear);
+        shader_rb_bear->setFloat("spotLight[1].quadratic",programState->spotLight.quadratic);
+        shader_rb_bear->setFloat("spotLight[1].cutOff", programState->spotLight.cutOff);
+        shader_rb_bear->setFloat("spotLight[1].outerCutOff", programState->spotLight.outerCutOff);
+
+        shader_rb_bear->setVec3("spotLight[2].position", programState->spotlightPositions[2]);
+        spotLight.direction = glm::normalize(programState->bearPosition - programState->spotlightPositions[2]);
+        shader_rb_bear->setVec3("spotLight[2].direction", programState->spotLight.direction);
+
+        shader_rb_bear->setVec3("spotLight[2].ambient", programState->spotLight.ambient);
+        shader_rb_bear->setVec3("spotLight[2].diffuse", programState->spotLight.diffuse);
+        shader_rb_bear->setVec3("spotLight[2].specular", programState->spotLight.specular);
+        shader_rb_bear->setFloat("spotLight[2].constant", programState->spotLight.constant);
+        shader_rb_bear->setFloat("spotLight[2].linear", programState->spotLight.linear);
+        shader_rb_bear->setFloat("spotLight[2].quadratic",programState->spotLight.quadratic);
+        shader_rb_bear->setFloat("spotLight[2].cutOff", programState->spotLight.cutOff);
+        shader_rb_bear->setFloat("spotLight[2].outerCutOff", programState->spotLight.outerCutOff);
+
+        shader_rb_bear->setVec3("spotLight[3].position", programState->spotlightPositions[3]);
+        spotLight.direction = glm::normalize(programState->bearPosition - programState->spotlightPositions[3]);
+        shader_rb_bear->setVec3("spotLight[3].direction", programState->spotLight.direction);
+
+        shader_rb_bear->setVec3("spotLight[3].ambient", programState->spotLight.ambient);
+        shader_rb_bear->setVec3("spotLight[3].diffuse", programState->spotLight.diffuse);
+        shader_rb_bear->setVec3("spotLight[3].specular", programState->spotLight.specular);
+        shader_rb_bear->setFloat("spotLight[3].constant", programState->spotLight.constant);
+        shader_rb_bear->setFloat("spotLight[3].linear", programState->spotLight.linear);
+        shader_rb_bear->setFloat("spotLight[3].quadratic",programState->spotLight.quadratic);
+        shader_rb_bear->setFloat("spotLight[3].cutOff", programState->spotLight.cutOff);
+        shader_rb_bear->setFloat("spotLight[3].outerCutOff", programState->spotLight.outerCutOff);
+
+        // directional light config
+        shader_rb_bear->setVec3("dirLight.direction", dirLight.direction);
+        shader_rb_bear->setVec3("dirLight.ambient", dirLight.ambient);
+        shader_rb_bear->setVec3("dirLight.diffuse", dirLight.diffuse);
+        shader_rb_bear->setVec3("dirLight.specular", dirLight.specular);
+
+        shader_rb_bear->setBool("hasNormalMap", false);
+        circusBear.Draw(*shader_rb_bear);
+
         // skyShader global config
         skyShader->use();
         skyShader->setMat4("projection", projection);
         skyShader->setMat4("view", view);
         skyShader->setVec3("cameraPos", programState->camera.Position);
 
+        //crtanje platforme
+        model = glm::mat4(1.0f);
+        model = glm::translate(model, programState->platformPosition);
+        model = glm::scale(model, glm::vec3(0.12f, 0.12f, 0.12f));
+        model = glm::rotate(model, 0.25f , glm::vec3(0.0f, 1.0f, 0.0f));
+        if(rotation1)
+            model=glm::rotate(model,0.25f*currentFrame,glm::vec3(0.0f, 1.0f, 0.0f));
 
         if(!colorSky) {
             glActiveTexture(GL_TEXTURE0);
@@ -393,15 +573,37 @@ int main() {
             glBindTexture(GL_TEXTURE_2D, platformTextureSpecular);
             glActiveTexture(GL_TEXTURE2);
             glBindTexture(GL_TEXTURE_2D, platformTextureNormal);
+
+            shader_rb_bear->use();
+            shader_rb_bear->setMat4("model", model);
+            shader_rb_bear->setBool("hasNormalMap", programState->hasNormalMapping);
+            platform.Draw(*shader_rb_bear);
+            shader_rb_bear->setBool("hasNormalMap", false);
         }
         else{
             skyShader->use();
+            skyShader->setMat4("model", model);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
+            platform.Draw(*skyShader);
         }
 
+        model = glm::mat4(1.0f);
+        model = glm::scale(model, glm::vec3(0.000000000000000001f, 0.00000000000001f, 0.00000000000000001f));
+        model = glm::translate(model,programState->pipePosition);
+        model= glm::rotate(model, 1.57f, glm::vec3(1.0f, 0.0f, 0.0f));
+        shader_rb_bear->use();
+        shader_rb_bear->setMat4("model", model);
+        shader_rb_bear->setBool("hasNormalMap", programState->hasNormalMapping);
+        pipe.Draw(*shader_rb_bear);
+        shader_rb_bear->setBool("hasNormalMap", false);
 
         glDisable(GL_CULL_FACE);
 
         if(!colorSky){
+            shader_rb_bear->use();
+            shader_rb_bear->setInt("material.texture_height1", 3);
+
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, floorTextureDiffuse);
             glActiveTexture(GL_TEXTURE1);
@@ -619,3 +821,68 @@ unsigned int loadCubemap(vector<std::string> &faces)
     return textureID;
 }
 
+void hasLights(Shader& shader, bool directional, bool pointLight, bool spotlight){
+    //directional
+    if(directional){
+        shader.setInt("hasDirLight", 1);
+    }
+    else{
+        shader.setInt("hasDirLight", 0);
+    }
+    // point light
+    if(pointLight){
+        shader.setInt("hasPointLight", 1);
+    }
+    else{
+        shader.setInt("hasPointLight", 0);
+    }
+    // spotlight
+    if(spotlight){
+        shader.setInt("hasSpotLight", 1);
+    }
+    else{
+        shader.setInt("hasSpotLight", 1);
+    }
+}
+
+void initializeTransparentWindows(vector<Prozor> &prozori){
+    Prozor p1;
+    p1.position = glm::vec3(-5.5f,1.723f,5.69f);
+    p1.windowScaleFactor = 1.2f;
+    p1.rotateX = 0.0f;
+    p1.rotateY = -20.0f;
+    p1.rotateZ = 0.0f;
+    prozori.push_back(p1);
+
+    Prozor p2;
+    p2.position = glm::vec3(-5.950f,1.723f,7.050f);
+    p2.windowScaleFactor = 1.2f;
+    p2.rotateX = 0.0f;
+    p2.rotateY = -20.0f;
+    p2.rotateZ = 0.0f;
+    prozori.push_back(p2);
+
+    Prozor p3;
+    p3.position = glm::vec3(-6.03f,1.723f,6.900f);
+    p3.windowScaleFactor = 1.2f;
+    p3.rotateX = 0.0f;
+    p3.rotateY = 68.5f;
+    p3.rotateZ = 0.0f;
+    prozori.push_back(p3);
+
+    Prozor p4;
+    p4.position = glm::vec3(-4.69f,1.723f,7.350f);
+    p4.windowScaleFactor = 1.2f;
+    p4.rotateX = 0.0f;
+    p4.rotateY = 68.5f;
+    p4.rotateZ = 0.0f;
+    prozori.push_back(p4);
+
+    Prozor p5;
+    p5.position = glm::vec3(-5.8f,2.352f,6.365f);
+    p5.windowScaleFactor = 1.4f;
+    p5.rotateX = 90.0f;
+    p5.rotateY = 0.0f;
+    p5.rotateZ = 20.0f;
+    prozori.push_back(p5);
+}

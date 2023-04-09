@@ -119,6 +119,13 @@ struct ProgramState {
             glm::vec3(5.0f, 5.0f, 5.0f)
     };
 
+    glm::vec3 circlePositions[4] = {
+            glm::vec3(3.92f, 4.45f, -3.92f),
+            glm::vec3(-3.92f, 4.45f, 3.92f),
+            glm::vec3(-3.92f, 4.45f, -3.92f),
+            glm::vec3(3.92f, 4.45f, 3.92f)
+    };
+
     ProgramState()
         :camera(glm::vec3(0.0f, 0.0f, 0.0f)){};
 
@@ -158,6 +165,10 @@ void ProgramState::LoadFromFile(std::string filename) {
            >> camera.Front.z;
     }
 }
+
+bool checkSpotlights[] = {
+        false,false,false,false
+};
 
 bool faceculling = false;
 bool rotation1=true;
@@ -261,6 +272,10 @@ int main() {
     unsigned int floorTextureSpecular = loadTexture("resources/textures/beach_texture/Seamless_beach_sand_footsteps_texture_SPECULAR.jpg");
     unsigned int floorTextureNormal = loadTexture("resources/textures/beach_texture/Seamless_beach_sand_footsteps_texture_NORMAL.jpg");
     unsigned int floorTextureHeigth = loadTexture("resources/textures/beach_texture/Seamless_beach_sand_footsteps_texture_DISP.jpg");
+
+    //model circle
+    Model circle("resources/objects/circle-obj/circle.obj");
+    circle.SetShaderTextureNamePrefix("material.");
 
     vector<Prozor> &prozori = programState->prozori;
     initializeTransparentWindows(prozori);
@@ -602,6 +617,51 @@ int main() {
 
         glDisable(GL_CULL_FACE);
 
+        spotlightShader.use();
+        spotlightShader.setMat4("view", view);
+        spotlightShader.setMat4("projection", projection);
+        model = glm::mat4(1.0f);
+        for(int i = 0; i < 4; i++){
+            glm::vec3 boja;
+            model = glm::mat4(1.0f);
+            boja = checkSpotlights[i] ? glm::vec3(1.0f) : glm::vec3(0.0f);
+            model = glm::scale(model, glm::vec3(1.2f,1.2f,1.2f));
+            model = glm::translate(model, programState->circlePositions[i]);
+            float rotation;
+            switch(i){
+                case 0:{
+                    rotation = 2.1f;
+                    model= glm::rotate(model, rotation, glm::vec3(1.0f, 0.0f, 1.0f));
+                    break;
+                }
+                case 1:{
+                    rotation = -2.1f;
+                    model= glm::rotate(model, rotation, glm::vec3(1.0f, 0.0f, 1.0f));
+                    break;
+                }
+                case 2:{
+                    rotation = 2.1f;
+                    model= glm::rotate(model, rotation, glm::vec3(1.0f, 0.0f, -1.0f));
+                    break;
+                }
+                case 3:{
+                    rotation = -2.1f;
+                    model= glm::rotate(model, rotation, glm::vec3(1.0f, 0.0f, -1.0f));
+
+                    break;
+                }
+            }
+            if(checkSpotlights[i])
+                boja=glm::vec3 (1.0f);
+            else
+                boja=glm::vec3(0.0f);
+
+            spotlightShader.use();
+            spotlightShader.setVec3("Color",boja);
+            spotlightShader.setMat4("model", model);
+            circle.Draw(spotlightShader);
+        }
+
         float stranica = 2.0f;
         if(!colorSky) {
             shader_rb_bear->use();
@@ -645,6 +705,13 @@ int main() {
             glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
             renderQuad();
         }
+
+        //pointlight
+        model = glm::mat4(1.0f);
+        model = glm::scale(model, glm::vec3(10.0f));
+        model = glm::translate(model, programState->pointLight.position);
+        spotlightShader.setMat4("model", model);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
 
         // cubemap
         glDepthFunc(GL_LEQUAL);
@@ -983,7 +1050,7 @@ void renderQuad()
                 pos3.x, pos3.y, pos3.z, nm.x, nm.y, nm.z, uv3.x, uv3.y, tangent2.x, tangent2.y, tangent2.z, bitangent2.x, bitangent2.y, bitangent2.z,
                 pos4.x, pos4.y, pos4.z, nm.x, nm.y, nm.z, uv4.x, uv4.y, tangent2.x, tangent2.y, tangent2.z, bitangent2.x, bitangent2.y, bitangent2.z
         };
-        
+
         glGenVertexArrays(1, &quadVAO);
         glGenBuffers(1, &quadVBO);
         glBindVertexArray(quadVAO);

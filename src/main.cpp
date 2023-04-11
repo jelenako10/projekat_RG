@@ -267,6 +267,11 @@ int main() {
     unsigned int platformTextureSpecular = loadTexture("resources/objects/platform/lambert1_roughness.jpg");
     unsigned int platformTextureNormal = loadTexture("resources/objects/platform/lambert1_normal.png");
 
+    //model lamp
+    Model lamp("resources/objects/lamp/Euro Spot LED czarny 1f.obj");
+    lamp.SetShaderTextureNamePrefix("material.");
+    unsigned int textureLamp = loadTexture("resources/objects/lamp/metal.jpg");
+
     // podloga teksture
     unsigned int floorTextureDiffuse = loadTexture("resources/textures/beach_texture/Seamless_beach_sand_footsteps_texture.jpg");
     unsigned int floorTextureSpecular = loadTexture("resources/textures/beach_texture/Seamless_beach_sand_footsteps_texture_SPECULAR.jpg");
@@ -478,6 +483,13 @@ int main() {
         lastFrame = currentFrame;
         processInput(window);
 
+        std::sort(prozori.begin(), prozori.end(),[cameraPosition = programState->camera.Position]
+                (const Prozor a, const Prozor b){
+            float d1 = glm::distance(a.position, cameraPosition);
+            float d2 = glm::distance(b.position, cameraPosition);
+            return  d1 > d2;
+        });
+
         glClearColor(programState->clearColor.r, programState->clearColor.g, programState->clearColor.b, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glEnable(GL_CULL_FACE);
@@ -603,6 +615,38 @@ int main() {
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
             platform.Draw(*skyShader);
+        }
+
+        shader_rb_bear->use();
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, textureLamp);
+        for(int i = 0; i < 4; i++){
+            model = glm::mat4(1.0f);
+            model = glm::translate(model, programState->spotlightPositions[i]);
+            model = glm::scale(model, glm::vec3(0.07f, 0.07f, 0.07f));
+            float rotation;
+            switch(i){
+                case 0:{
+                    rotation = -0.78f;
+                    break;
+                }
+                case 1:{
+                    rotation = 2.35f;
+                    break;
+                }
+                case 2:{
+                    rotation = 0.78f;
+                    break;
+                }
+                case 3:{
+                    rotation = -2.35f;
+                    break;
+                }
+            }
+            model= glm::rotate(model, rotation, glm::vec3(0.0f, 1.0f, 0.0f));
+            shader_rb_bear->setMat4("model", model);
+            shader_rb_bear->setBool("hasNormalMap", false);
+            lamp.Draw(*shader_rb_bear);
         }
 
         model = glm::mat4(1.0f);
@@ -731,11 +775,22 @@ int main() {
 
         shader_rb_bear->use();
         shader_rb_bear->setFloat("transparency", 0.5f);
-
+        hasLights(*shader_rb_bear, true, false, true);
         glBindVertexArray(transparentVAO);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, transparentTexture);
 
+        for(int i = 0; i < prozori.size(); ++i){
+            model = glm::mat4(1.0f);
+            model = glm::translate(model, prozori[i].position);
+            model = glm::scale(model, glm::vec3(prozori[i].windowScaleFactor));
+            model = glm::rotate(model, glm::radians(prozori[i].rotateX),glm::vec3(1.0,0.0,0.0));
+            model = glm::rotate(model, glm::radians(prozori[i].rotateY),glm::vec3(0.0,1.0,0.0));
+            model = glm::rotate(model, glm::radians(prozori[i].rotateZ),glm::vec3(0.0,0.0,1.0));
+            shader_rb_bear->use();
+            shader_rb_bear->setMat4("model", model);
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+        }
         // imgui
 
         if (programState->ImGuiEnabled)

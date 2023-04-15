@@ -3,6 +3,8 @@ https://youtu.be/C-yrAot7o_8
 
 Napomena: Na snimku se ne vidi lepo anti-aliasing efekat ali se u C-lionu lepo vidi (potrebno je da na R zaustavite rotaciju medveda i da se dosta priblizite medvedu jer su detalji dosta stitni).
 
+Projekat obuhvata oblasti od 1. do 8. nedelje plus blending, face culling i advanced lighting. Iz grupe A, je implementiran cubemaps, anti-aliasing. Iz grupe B je implementiran normal/parallax mapping.
+
 Instructions:
 
 Press F1 to turn on/off GUI

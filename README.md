@@ -1,4 +1,9 @@
+Youtube link:
+https://youtu.be/C-yrAot7o_8
 
+Napomena: Na snimku se ne vidi lepo anti-aliasing efekat ali se u C-lionu lepo vidi (potrebno je da na R zaustavite rotaciju medveda i da se dosta priblizite medvedu jer su detalji dosta stitni).
+
+Instructions:
 
 Press F1 to turn on/off GUI
 
@@ -23,4 +28,5 @@ Press F to change a type of face culling (front/end)
 Press R to start auto-rotation of formula and platform (second press returns everything to default)
 
 Press ESC to exit
+
 
